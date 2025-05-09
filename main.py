@@ -78,4 +78,4 @@ if __name__ == "__main__":
             subprocess.run(["ngrok", "config", "add-authtoken", ngrok_auth_token])
         ngrok_process = subprocess.Popen(["ngrok", "http", ngrok_port])
 
-    app.run(port=int(ngrok_port))
+    app.run(port=int(ngrok_port), threaded=True)
