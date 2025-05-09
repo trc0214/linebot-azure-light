@@ -1,54 +1,56 @@
+[English](README.md) | [中文說明](README.zh-TW.md)
+
 # LINE Bot + Azure OpenAI + ngrok
 
-本專案為一個結合 LINE Messaging API、Azure OpenAI 與 ngrok 的 Python Flask 範例。
+This project is a Python Flask example that integrates the LINE Messaging API, Azure OpenAI, and ngrok.
 
-## 事前準備
+## Prerequisites
 
-1. **Python 環境**
-   - 安裝 Python 3.8 以上版本
+1. **Python Environment**
+   - Install Python 3.8 or higher
 
-2. **LINE Bot 設定**
-   - 申請 LINE Messaging API Channel
-   - 取得 Channel Access Token 與 Channel Secret
+2. **LINE Bot Setup**
+   - Apply for a LINE Messaging API Channel
+   - Obtain the Channel Access Token and Channel Secret
 
-3. **Azure OpenAI 設定**
-   - 申請 Azure OpenAI 服務
-   - 取得 Endpoint、API Key、Deployment Name
+3. **Azure OpenAI Setup**
+   - Apply for Azure OpenAI service
+   - Obtain the Endpoint, API Key, and Deployment Name
 
 4. **ngrok**
-   - 註冊 ngrok 帳號並取得 Auth Token
-   - 下載並安裝 ngrok
+   - Register for an ngrok account and obtain the Auth Token
+   - Download and install ngrok
 
-5. **設定環境變數**
-   - 複製 `.env.example` 為 `.env`，填入上述資訊
+5. **Environment Variable Setup**
+   - Copy `.env.example` to `.env` and fill in the information obtained above
 
-## 安裝步驟
+## Installation Steps
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 啟動方式
+## How to Run
 
 ```bash
 python main.py
 ```
 
-- 程式會自動啟動 ngrok 並顯示 public URL
-- 將 ngrok public URL 設為 LINE Webhook URL（如 `https://xxxx.ngrok-free.app/line/webhook`）
+- The program will automatically start ngrok and display a public URL.
+- Set the ngrok public URL as the LINE Webhook URL (e.g., `https://xxxx.ngrok-free.app/line/webhook`).
 
-## 注意事項
+## Notes
 
-- `max_completion_tokens` 建議設 256~512，避免超時
-- reply_token 只能用一次，且需在 1 分鐘內回覆
-- 若遇到 OpenAI API 回應過慢，請調整 token 或優化 prompt
+- It is recommended to set `max_completion_tokens` to 256~512 to avoid timeouts.
+- The `reply_token` can only be used once and must be replied to within 1 minute.
+- If you encounter slow responses from the OpenAI API, please adjust the token or optimize the prompt.
 
-## 檔案說明
+## File Descriptions
 
-- `main.py`：主程式
-- `.env.example`：環境變數範例
-- `requirements.txt`：依賴套件列表
+- `main.py`: Main program
+- `.env.example`: Example environment variable file
+- `requirements.txt`: List of dependency packages
 
 ---
 
-如有問題請參考原始碼註解或提出 Issue。
+If you have any questions, please refer to the source code comments or submit an Issue.
