@@ -47,7 +47,6 @@ async def callback(request: Request):
 @handler.add(MessageEvent)
 def handle_message(event):
     from linebot.v3.webhooks import TextMessageContent
-
     if not hasattr(event, "message") or not isinstance(event.message, TextMessageContent):
         return
     user_message = event.message.text
@@ -59,26 +58,21 @@ def handle_message(event):
         display_name = "user"
     user_histories[user_id].append({"role": "user", "content": user_message})
     history = list(user_histories[user_id])
-    system_prompt = f"You are a helpful assistant. The user's name is {display_name}."
+    system_prompt = f"You are a helpful assistant. The user's name is {display_name}. And anser the question in Chinese and simple. " 
     messages = [{"role": "system", "content": system_prompt}] + history
     try:
-        response = client.chat.completions.create(
-            messages=messages,
-            max_completion_tokens=500,
-            model=deployment,
-        )
+        response = client.chat.completions.create(messages=messages, max_completion_tokens=5000, model=deployment)
         reply = response.choices[0].message.content.strip()
         if not reply:
             reply = "很抱歉，目前無法回應您的訊息，請稍後再試。"
+            print(response)
         user_histories[user_id].append({"role": "assistant", "content": reply})
     except Exception as e:
         reply = "很抱歉，您的訊息觸發了內容審查，請換個方式再試一次。"
-    line_api.reply_message(
-        ReplyMessageRequest(
-            reply_token=event.reply_token,
-            messages=[TextMessage(text=reply)]
-        )
-    )
+    line_api.reply_message(ReplyMessageRequest(
+        reply_token=event.reply_token,
+        messages=[TextMessage(text=reply)]
+    ))
 
 if __name__ == "__main__":
     ngrok_auth_token = os.getenv("NGROK_AUTH_TOKEN")
