@@ -1,22 +1,24 @@
-from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
-
 import os
 import dotenv
 import subprocess
+from collections import defaultdict, deque
 
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
+import uvicorn
+
+from linebot.v3.messaging import MessagingApi, Configuration, ApiClient, TextMessage, ReplyMessageRequest
+from linebot.v3.webhook import WebhookHandler, MessageEvent
 from openai import AzureOpenAI
 
 dotenv.load_dotenv()
 
-app = Flask(__name__)
+app = FastAPI()
 
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+line_config = Configuration(access_token=os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+line_api = MessagingApi(ApiClient(line_config))
 
-# Azure OpenAI setup
 endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 subscription_key = os.getenv("AZURE_OPENAI_KEY")
@@ -28,54 +30,79 @@ client = AzureOpenAI(
     api_key=subscription_key,
 )
 
+user_histories = defaultdict(lambda: deque(maxlen=10))
 
-@app.route("/")
-def home():
-    return "Line Bot is running!"
+@app.get("/")
+async def home():
+    return PlainTextResponse("Line Bot is running!")
 
-
-@app.route("/line/webhook", methods=["POST"])
-def callback():
+@app.post("/line/webhook")
+async def callback(request: Request):
     signature = request.headers.get("X-Line-Signature", "")
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return "OK"
+    body = await request.body()
+    body_text = body.decode("utf-8")
+    handler.handle(body_text, signature)
+    return PlainTextResponse("OK")
 
-
-@handler.add(MessageEvent, message=TextMessage)
+@handler.add(MessageEvent)
 def handle_message(event):
+    from linebot.v3.webhooks import TextMessageContent
+
+    if not hasattr(event, "message") or not isinstance(event.message, TextMessageContent):
+        return
     user_message = event.message.text
+    user_id = event.source.user_id
+    try:
+        profile = line_api.get_profile(user_id)
+        display_name = profile.display_name
+    except:
+        display_name = "user"
+    user_histories[user_id].append({"role": "user", "content": user_message})
+    history = list(user_histories[user_id])
+    system_prompt = f"You are a helpful assistant. The user's name is {display_name}."
+    messages = [{"role": "system", "content": system_prompt}] + history
     try:
         response = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": user_message},
-            ],
+            messages=messages,
             max_completion_tokens=500,
             model=deployment,
         )
         reply = response.choices[0].message.content.strip()
+        if not reply:
+            reply = "很抱歉，目前無法回應您的訊息，請稍後再試。"
+        user_histories[user_id].append({"role": "assistant", "content": reply})
     except Exception as e:
-        print("OpenAI error:", e)
         reply = "很抱歉，您的訊息觸發了內容審查，請換個方式再試一次。"
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-
+    line_api.reply_message(
+        ReplyMessageRequest(
+            reply_token=event.reply_token,
+            messages=[TextMessage(text=reply)]
+        )
+    )
 
 if __name__ == "__main__":
     ngrok_auth_token = os.getenv("NGROK_AUTH_TOKEN")
     ngrok_port = os.getenv("NGROK_PORT", "5000")
     ngrok_url = os.getenv("NGROK_URL")
-
+    ngrok_cmd = ["ngrok", "http", ngrok_port]
     if ngrok_url:
-        ngrok_process = subprocess.Popen(
-            ["ngrok", "http", f"--url={ngrok_url}", ngrok_port]
+        domain = ngrok_url.replace("https://", "").replace("http://", "").split("/")[0]
+        ngrok_cmd += ["--domain", domain]
+    if ngrok_auth_token:
+        subprocess.run(["ngrok", "config", "add-authtoken", ngrok_auth_token])
+    ngrok_process = subprocess.Popen(ngrok_cmd)
+    import time, requests
+    time.sleep(2)
+    try:
+        tunnels = requests.get("http://localhost:4040/api/tunnels").json()
+        public_url = next(
+            (t["public_url"] for t in tunnels["tunnels"] if t["public_url"].startswith("https://")),
+            None
         )
-    else:
-        if ngrok_auth_token:
-            subprocess.run(["ngrok", "config", "add-authtoken", ngrok_auth_token])
-        ngrok_process = subprocess.Popen(["ngrok", "http", ngrok_port])
-
-    app.run(port=int(ngrok_port), threaded=True)
+        if public_url:
+            print(f"ngrok public URL: {public_url}")
+        else:
+            print("ngrok public URL not found.")
+    except Exception as e:
+        print("無法取得 ngrok public URL:", e)
+    uvicorn.run(app, host="0.0.0.0", port=int(ngrok_port))
